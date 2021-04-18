@@ -1,0 +1,11 @@
+{
+    "in_topic_conf": {
+        "topic_name": "input_topic",
+        "partitions_quantity": 10
+        
+    },
+    "out_topic_conf": {
+        "topic_name": "output_topic",
+        "partitions_quantity": 1
+    }
+}
