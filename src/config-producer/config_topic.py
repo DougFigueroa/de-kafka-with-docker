@@ -64,6 +64,7 @@ def create_topics(admin: object, config: dict) -> None:
             logging.info(f'Creation of the topic {topic} completed.')
         except Exception as e:
             logger.error(f'Error creating the kafka topic: {topic}. {e}')
+            raise Exception(f'Error creating the kafka topic: {topic}. {e}')
 
 
 def list_topics_and_config(admin: object) -> None:
@@ -73,7 +74,7 @@ def list_topics_and_config(admin: object) -> None:
         - object, the admin client kafka object.
     Returns: None.
     """
-    list_response = admin.list_topics(timeout=1)
+    list_response = admin.list_topics(timeout=5)
     # get all the broker info
     logging.info('>Broker details:')
     for counter, broker in enumerate(list_response.brokers.items(), start=1):
@@ -118,7 +119,7 @@ def main() -> None:
     """
     configuration_file = 'topic_config.json'
     data_file = 'dummie_data.json'
-    time.sleep(8)
+    time.sleep(5)
     actual_path = os.path.dirname(__file__)
     configuration_path = os.path.join(actual_path, configuration_file)
     data_path = os.path.join(actual_path, data_file)

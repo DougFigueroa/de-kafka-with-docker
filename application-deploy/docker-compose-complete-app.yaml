@@ -51,10 +51,23 @@ services:
         container_name: setup_kafka
         network_mode: host
         environment: 
-            - KAFKA_CLUSTER_CONNECT='localhost:9092'
+            - KAFKA_CLUSTER_CONNECT=localhost:9092
             - LOAD_SAMPLE_DATA=True
         depends_on:
             - zookeeper1
             - zookeeper2
             - kafka1
             - kafka2
+    consumer:
+        image: komodoensis29/consumer-kafka
+        container_name: consumer_kafka
+        network_mode: host
+        environment: 
+            - KAFKA_CLUSTER_CONNECT=localhost:9092
+        command: tail -F /dev/null
+        depends_on:
+            - zookeeper1
+            - zookeeper2
+            - kafka1
+            - kafka2
+            - setup
