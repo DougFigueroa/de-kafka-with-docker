@@ -4,23 +4,19 @@ The input-topic with ten partitions and the output-topic with one partition.
 Also preloads the kafka cluster with test data (if flag is set to true).
 """
 import os
-import time
 import json
 import logging
-from confluent_kafka.admin import AdminClient, NewTopic
-from confluent_kafka import Producer
+from confluent_kafka import Consumer, Producer
 
 # defining logger
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # reading the environement variables defined on the docker compose
-KAFKA_CLUSTER = os.environ.get('KAFKA_CLUSTER_CONNECT', 'localhost:9092')
-LOAD_DATA = os.environ.get('LOAD_SAMPLE_DATA', False)
-logging.info(
-    (f'>Env variables: KAFKA_CLUSTER_CONNECT={KAFKA_CLUSTER} '
-     f'LOAD_SAMPLE_DATA={LOAD_DATA}'))
-BROKER_CONFIG = {'bootstrap.servers': KAFKA_CLUSTER}
+# KAFKA_CLUSTER = os.environ['KAFKA_CLUSTER_CONNECT']
+KAFKA_CLUSTER = 'localhost:9092'
+BROKER_CONFIG = {'bootstrap.servers': 'localhost:9092',
+            'group.id': 1, 'session.timeout.ms': 6000}
 
 
 def read_json_file(file_route: str) -> dict:
@@ -37,34 +33,6 @@ def read_json_file(file_route: str) -> dict:
     return config
 
 
-def create_topics(admin: object, config: dict) -> None:
-    """Create the kafka topics based on the configuration file.
-    Args:
-        - object, the admin client kafka object.
-        - dict, json configuration of the process.
-    Returns: None.
-    """
-    # read the topic configuration and create the NewTopic objects
-    topics = []
-    for k, v in config.items():
-        topics.append(NewTopic(
-            v['topic_name'],
-            num_partitions=v['partitions_quantity'],
-            replication_factor=1
-            )
-        )
-
-    logging.info(f'Starting the creation of the topics: {topics}...')
-    creation_response = admin.create_topics(topics)
-    # the response has futures (which runs asynchronously) so we validate them
-    # to see if they succeeded or not
-    for topic, f in creation_response.items():
-        try:
-            f.result()
-            logging.info(f'Creation of the topic {topic} completed.')
-        except Exception as e:
-            logger.error(f'Error creating the kafka topic: {topic}. {e}')
-
 
 def list_topics_and_config(admin: object) -> None:
     """Check the topics that exists at a specifid.
@@ -73,9 +41,9 @@ def list_topics_and_config(admin: object) -> None:
         - object, the admin client kafka object.
     Returns: None.
     """
-    list_response = admin.list_topics(timeout=1)
+    list_response = admin.list_topics(timeout=20)
     # get all the broker info
-    logging.info('>Broker details:')
+    logging.info('>Brokers details:')
     for counter, broker in enumerate(list_response.brokers.items(), start=1):
         logging.info(f'{counter}-Broker info: {broker}')
     logging.info('>Topics details:')
@@ -84,7 +52,20 @@ def list_topics_and_config(admin: object) -> None:
         logging.info(f'{counter}-Topic info: {topic_data}')
 
 
-def load_sample_data(topic: str, sample_data: list) -> None:
+def consume_data() -> None:
+    """Consume the data from the input-topic and write it to the output-topic.
+    The data is going to be sorted in an ascending order.
+    """
+    consumer = Consumer(BROKER_CONFIG)
+
+    messages = consumer.consume(10)
+    print('Consumed')
+    for m in messages:
+        print(m)
+    consumer.close()
+
+
+def load_data_output_topic(topic: str, sample_data: list) -> None:
     """Loads the sample data to the input kafka topic.
     This will load data across 10 different partitions.
     Args:
@@ -117,22 +98,13 @@ def main() -> None:
     From configuring the cluster topics to load the sample input data.
     """
     configuration_file = 'topic_config.json'
-    data_file = 'dummie_data.json'
-    time.sleep(8)
-    actual_path = os.path.dirname(__file__)
-    configuration_path = os.path.join(actual_path, configuration_file)
-    data_path = os.path.join(actual_path, data_file)
-    config = read_json_file(configuration_path)
-    # defining the admin client needed to create topics
-    admin = AdminClient(BROKER_CONFIG)
-    create_topics(admin, config)
-    # this step its only for validation purposes
-    list_topics_and_config(admin)
-    # start the load of the sample data to the input topic
-    if LOAD_DATA:
+    config = read_json_file(configuration_file)
+    # start to consume the data
+    consume_data()
+    flag = True
+    if flag:
         in_topic_name = config['in_topic_conf']['topic_name']
-        sample_data = read_json_file(data_path)
-        load_sample_data(in_topic_name, sample_data)
+     
 
 
 if __name__ == '__main__':
