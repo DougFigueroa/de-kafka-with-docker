@@ -46,6 +46,10 @@ services:
         depends_on:
             - zookeeper1
             - zookeeper2
+    postgresql:
+        image: komodoensis29/postgresql-kafka
+        container_name: postgresql_kafka
+        network_mode: host
     setup:
         image: komodoensis29/setup-kafka
         container_name: setup_kafka

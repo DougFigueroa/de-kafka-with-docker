@@ -6,37 +6,27 @@ Also preloads the kafka cluster with test data (if flag is set to true).
 import os
 import json
 import logging
-from sqlalchemy import create_engine
 from confluent_kafka import Consumer, Producer
 
 # defining logger
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Kafka configs
 # reading the environement variables defined on the docker compose
 KAFKA_CLUSTER = os.environ.get('KAFKA_CLUSTER_CONNECT', 'localhost:9092')
 logging.info(
     (f'>Env variables: KAFKA_CLUSTER_CONNECT={KAFKA_CLUSTER}'))
+
 BROKER_CONFIG = {
     'bootstrap.servers': KAFKA_CLUSTER,
     'group.id': "ConsumerGroup1",
     'auto.offset.reset': 'smallest'
 }
 POLLING_TIMEOUT = 2  # seconds
-MIN_COMMIT_COUNT = 2  # quantity of message before commit offset to kafka
-POLLING_LIMIT = 60
-
-# DB configs
-DB_USER = 'admin'
-DB_PASS = 'Admin123@'  # this should be read from vault or some secrets manager
-DB = 'kafkadb'
-HOST = 'localhost'
-PORT = '5432'
-DB_URL = f'postgres://{DB_USER}:{DB_PASS}@{HOST}:{PORT}/{DB}'
+MIN_COMMIT_COUNT = 2
 
 
-def consume_data(topic: list):
+def consume_data(topic: list) -> list:
     """Consume the data from the input-topic and write it to the output-topic.
     The data is going to be sorted in an ascending order.
     Args:
@@ -45,16 +35,15 @@ def consume_data(topic: list):
     """
     consumer = Consumer(BROKER_CONFIG)
     running = True
-    status = 'RUNNING'
+    all_messages = []
     try:
         logging.info(f'Starting consuming messages from {topic}')
         consumer.subscribe(topic)
         msg_count = 0
+        total = 0
         waiting_counter = 0
         while running:
-            # stop consuming process after the defined number of pollings
-            if waiting_counter >= POLLING_LIMIT:
-                status = 'FINISHED'
+            if waiting_counter == 60:
                 break
             msg = consumer.poll(timeout=POLLING_TIMEOUT)
             if not msg:
@@ -67,54 +56,26 @@ def consume_data(topic: list):
                         f'Partition readed from topic: {msg.topic()}, '
                         f'partition: {msg.partition()}, offset: {msg.offset()}'
                         )
-                    status = 'FINISHED'
                 elif msg.error():
                     logger.error(f'Error while polling. {msg.error()}')
-                    status = 'FAILED'
                     raise KafkaException(msg.error())
             else:
                 message_value = int(msg.value().decode('utf-8'))
                 logging.info(f'Processing message: {message_value}')
-                load_message_to_db(message_value)
+                total += message_value
+                # add to a list to order the values and loaded to the output topic
+                all_messages.append(message_value)
+                # load_data_output_topic(msg)
                 msg_count += 1
-                if msg_count % MIN_COMMIT_COUNT == 0:
+                if msg_count % MIN_COMMIT_COUNT == 2:
                     consumer.commit(async=False)
     except KeyboardInterrupt as ki:
-        logger.warning(
-            '>>> Process stopped by the user. Thanks for consuming data. :)')
+        logger.warning('>>> Process stopped by the user. Thanks for consuming data. :)')
     finally:
-        logging.info('Closing consumer connection to kafka...')
-        # last commit
-        consumer.commit(async=False)
         # Close down consumer to commit final offsets.
         consumer.close()
-        load_consumer_status_to_db(status)
-
-
-def load_message_to_db(message_value: str) -> None:
-    """Loads the consumed messages values to a postgres table to not exceed memory.
-        Args:
-            - message_value: str, the message value consumed from input_topic.
-        Returns: None.
-    """
-    db = create_engine(DB_URL).connect()
-    db.execute(f'INSERTO INTO messages (number) VALUES ({message_value});')
-    loggin.info(
-        f'Value: {message_value} successfully loaded to table messages')
-
-
-def load_consumer_status_to_db(status: str) -> None:
-    """Loads the consumer status after consuming messages to postgres table.
-        Args:
-            - status: str, status of the consumer after polling: 
-                      FINISHED|FAILED|RUNNING.
-        Returns: None.
-    """
-    db = create_engine(DB_URL).connect()
-    db.execute(f'INSERTO INTO consumers_status (status) VALUES ({status});')
-    loggin.info(
-        f'Consumer status: {status}. Successfully loaded to table consumers_status')
-
+        all_messages.sort()
+        load_data_output_topic('output_topic', all_messages)
 
 
 def acked(err: str, msg: str) -> None:
