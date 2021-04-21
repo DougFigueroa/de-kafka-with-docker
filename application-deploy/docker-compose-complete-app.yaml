@@ -1,4 +1,4 @@
-version: '3'
+version: '2'
 services:
     zookeeper1:
         image: confluentinc/cp-zookeeper
@@ -64,11 +64,9 @@ services:
             - kafka2
     consumer:
         image: komodoensis29/consumer-kafka
-        container_name: consumer_kafka
         network_mode: host
         environment: 
             - KAFKA_CLUSTER_CONNECT=localhost:9092
-        command: tail -F /dev/null
         depends_on:
             - zookeeper1
             - zookeeper2
@@ -82,8 +80,7 @@ services:
         network_mode: host
         environment: 
             - KAFKA_CLUSTER_CONNECT=localhost:9092
-            - KAFKA_CONSUMERS_EXPECTED=1
-        command: tail -F /dev/null
+            - KAFKA_CONSUMERS_EXPECTED=10
         depends_on:
             - zookeeper1
             - zookeeper2

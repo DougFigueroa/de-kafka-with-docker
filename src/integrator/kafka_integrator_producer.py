@@ -4,6 +4,7 @@ The input-topic with ten partitions and the output-topic with one partition.
 Also preloads the kafka cluster with test data (if flag is set to true).
 """
 import os
+import time
 import json
 import logging
 from sqlalchemy import create_engine, select
@@ -47,6 +48,8 @@ def daemon_read(table_name: str, column_name: str) -> None:
         - column_name: str, the column name with the status value.
     Returns: None.
     """
+    none_counter = 0
+    retries = 100
     db = create_engine(DB_URL)
     connection = db.connect()
     query = f'SELECT COUNT(1) count FROM {table_name} WHERE {column_name}=\'FINISHED\';'
@@ -54,13 +57,16 @@ def daemon_read(table_name: str, column_name: str) -> None:
     try:
         while True:
             count = int(connection.execute(query).first()[0])
-            if count % CONSUMERS_EXPECTED == 0:
+            if count % CONSUMERS_EXPECTED == 0 and count != 0:
                 logger.info(
                     'All consumers readed, proceding to load to output_topic...')
                 read_data_from_database('messages', 'number')
                 break
             if not count:
+                none_counter += 1
+            if none_counter >= retries:
                 break
+            time.sleep(5)
     except Exception as e:
         logging.error(f'Failed read the status of consumers. {e}')
     except KeyboardInterrupt as k:
@@ -146,6 +152,7 @@ def main() -> None:
     output topic. There is a daemon that is going to be running until
     all the configured consumers end writing the data to postgres.
     """
+    time.sleep(120)
     # run process untill all the consumers have
     daemon_read('consumers_status', 'status')
 
