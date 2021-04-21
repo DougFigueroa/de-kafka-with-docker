@@ -118,7 +118,7 @@ def main() -> None:
     From configuring the cluster topics to load the sample input data.
     """
     configuration_file = 'topic_config.json'
-    data_file = 'dummie_data.json'
+    data_file = 'sample_data.json'
     time.sleep(5)
     actual_path = os.path.dirname(__file__)
     configuration_path = os.path.join(actual_path, configuration_file)

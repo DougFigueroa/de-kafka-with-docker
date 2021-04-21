@@ -56,7 +56,7 @@ services:
         network_mode: host
         environment: 
             - KAFKA_CLUSTER_CONNECT=localhost:9092
-            - LOAD_SAMPLE_DATA=True
+            - LOAD_SAMPLE_DATA=Truez
         depends_on:
             - zookeeper1
             - zookeeper2
@@ -75,3 +75,19 @@ services:
             - kafka1
             - kafka2
             - setup
+            - postgresql
+    producer:
+        image: komodoensis29/producer-kafka
+        container_name: producer_kafka
+        network_mode: host
+        environment: 
+            - KAFKA_CLUSTER_CONNECT=localhost:9092
+            - KAFKA_CONSUMERS_EXPECTED=1
+        command: tail -F /dev/null
+        depends_on:
+            - zookeeper1
+            - zookeeper2
+            - kafka1
+            - kafka2
+            - setup
+            - postgresql

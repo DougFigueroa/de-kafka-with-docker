@@ -33,7 +33,7 @@ DB_PASS = 'Admin123@'  # this should be read from vault or some secrets manager
 DB = 'kafkadb'
 HOST = 'localhost'
 PORT = '5432'
-DB_URL = f'postgres://{DB_USER}:{DB_PASS}@{HOST}:{PORT}/{DB}'
+DB_URL = f'postgresql://{DB_USER}:{DB_PASS}@{HOST}:{PORT}/{DB}'
 
 
 def consume_data(topic: list):
@@ -74,7 +74,6 @@ def consume_data(topic: list):
                     raise KafkaException(msg.error())
             else:
                 message_value = int(msg.value().decode('utf-8'))
-                logging.info(f'Processing message: {message_value}')
                 load_message_to_db(message_value)
                 msg_count += 1
                 if msg_count % MIN_COMMIT_COUNT == 0:
@@ -84,8 +83,6 @@ def consume_data(topic: list):
             '>>> Process stopped by the user. Thanks for consuming data. :)')
     finally:
         logging.info('Closing consumer connection to kafka...')
-        # last commit
-        consumer.commit(async=False)
         # Close down consumer to commit final offsets.
         consumer.close()
         load_consumer_status_to_db(status)
@@ -97,10 +94,18 @@ def load_message_to_db(message_value: str) -> None:
             - message_value: str, the message value consumed from input_topic.
         Returns: None.
     """
-    db = create_engine(DB_URL).connect()
-    db.execute(f'INSERTO INTO messages (number) VALUES ({message_value});')
-    loggin.info(
-        f'Value: {message_value} successfully loaded to table messages')
+    db = create_engine(DB_URL)
+    connection = db.connect()
+    try:
+        connection.execute(
+            f'INSERT INTO messages (number) VALUES (\'{message_value}\');')
+        logging.debug(
+            f'Value: {message_value} successfully loaded to table messages')
+    except Exception as e:
+        logging.error(f'Failed to insert value: {message_value}. {e}')
+    finally:
+        connection.close()
+        db.dispose()
 
 
 def load_consumer_status_to_db(status: str) -> None:
@@ -110,55 +115,24 @@ def load_consumer_status_to_db(status: str) -> None:
                       FINISHED|FAILED|RUNNING.
         Returns: None.
     """
-    db = create_engine(DB_URL).connect()
-    db.execute(f'INSERTO INTO consumers_status (status) VALUES ({status});')
-    loggin.info(
-        f'Consumer status: {status}. Successfully loaded to table consumers_status')
+    db = create_engine(DB_URL)
+    connection = db.connect()
 
-
-
-def acked(err: str, msg: str) -> None:
-    """Callback function to notify if a message has been produced or not.
-    Args:
-        - err: str, the error message.
-        - msg: str, the message produced.
-    """
-    if err:
-        logger.error(f'Failed to deliver message: {str(msg)}, {str(err)}')
-    else:
-        logging.info(f'Message produced: {str(msg)}')
-
-
-def load_data_output_topic(topic: str, all_messages: list) -> None:
-    """Loads the sample data to the input kafka topic.
-    This will load data across 10 different partitions.
-    Args:
-        - topic: str, the topic name where the data is going to be loaded.
-        - all_messages: list, the sample data to be loaded by the producer across
-          all the partitions of the specified topic.
-    Returns: None
-    """
-    producer = Producer(BROKER_CONFIG)
-
-    # iterate through partitions
-    for data in all_messages:
-        try:
-            producer.produce(topic, value=str(data), partition=0, callback=acked)
-        except Exception as e:
-            logger.error(
-                f'Producer failed to produce a message to the topic. {e}')
-            raise Exception(
-                f'Failed to produce a message from Kakfia. {e}')
-        producer.poll(0)
-
-    # ensure all the delivery queue has been loaded
-    producer.flush()
-    logging.info('Data successfully produced and loaded to the specify topic.')
+    try:
+        connection.execute(
+            f'INSERT INTO consumers_status (status) VALUES (\'{status}\');')
+        logging.info(
+            f'Consumer status: {status}. Successfully loaded to table consumers_status')
+    except Exception as e:
+        logging.error(f'Failed to insert value: {message_value}. {e}')
+    finally:
+        connection.close()
+        db.dispose()
 
 
 def main() -> None:
     """Orchestrates all the process execution.
-    From configuring the cluster topics to load the sample input data.
+    From consuming the data from the input_topic to loaded on postgres.
     """
     # start to consume the data
     topics = ['input_topic']
